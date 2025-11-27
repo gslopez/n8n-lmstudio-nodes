@@ -96,7 +96,16 @@ export class LmStudioSimpleMessage implements INodeType {
 				const jsonSchemaStr = this.getNodeParameter('jsonSchema', itemIndex, '') as string;
 
 				// Build base request body
-				const requestBody: any = {
+				const requestBody: {
+					model: string;
+					messages: Array<{ role: string; content: string }>;
+					temperature: number;
+					max_tokens?: number;
+					response_format?: {
+						type: string;
+						json_schema: unknown;
+					};
+				} = {
 					model: modelName,
 					messages: [
 						{
