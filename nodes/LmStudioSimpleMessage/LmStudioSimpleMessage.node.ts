@@ -25,18 +25,18 @@ export class LmStudioSimpleMessage implements INodeType {
 				displayName: 'Host Name',
 				name: 'hostName',
 				type: 'string',
-				default: 'localhost:1234',
+				default: 'https://localhost:1234',
 				required: true,
-				placeholder: 'localhost:1234 or https://api.example.com',
-				description: 'LM Studio server hostname and port. Include https:// for secure connections.',
+				placeholder: 'https://localhost:1234',
+				description: 'LM Studio server hostname and port.',
 			},
 			{
 				displayName: 'Model Name',
 				name: 'modelName',
 				type: 'string',
-				default: '',
+				default: 'google/gemma-3-4b',
 				required: true,
-				placeholder: 'local-model',
+				placeholder: 'LM Studio model name',
 				description: 'The model identifier to use',
 			},
 			{
@@ -54,8 +54,8 @@ export class LmStudioSimpleMessage implements INodeType {
 				displayName: 'JSON Schema',
 				name: 'jsonSchema',
 				type: 'json',
-				default: '',
-				description: 'Optional JSON schema for structured output. Provide any valid JSON schema - it will be automatically wrapped in the required format.',
+				default: '{}',
+				description: 'Optional JSON schema for structured output. Provide any valid JSON schema - it will be automatically wrapped in the required format. Use {} for no schema.',
 			},
 			{
 				displayName: 'Temperature',
@@ -66,7 +66,7 @@ export class LmStudioSimpleMessage implements INodeType {
 					maxValue: 2,
 					numberPrecision: 2,
 				},
-				default: 1.0,
+				default: 0.3,
 				description: 'Controls randomness. Lower values make output more focused and deterministic.',
 			},
 			{
@@ -76,7 +76,8 @@ export class LmStudioSimpleMessage implements INodeType {
 				typeOptions: {
 					minValue: 1,
 				},
-				default: '',
+				required: false,
+				default: null,
 				description: 'Maximum number of tokens to generate. Leave empty for model default.',
 			},
 		],
@@ -93,7 +94,7 @@ export class LmStudioSimpleMessage implements INodeType {
 				const message = this.getNodeParameter('message', itemIndex) as string;
 				const temperature = this.getNodeParameter('temperature', itemIndex) as number;
 				const maxTokens = this.getNodeParameter('maxTokens', itemIndex, '') as number | string;
-				const jsonSchemaStr = this.getNodeParameter('jsonSchema', itemIndex, '') as string;
+				const jsonSchemaStr = this.getNodeParameter('jsonSchema', itemIndex, '{}') as string;
 
 				// Build base request body
 				const requestBody: {
@@ -125,12 +126,14 @@ export class LmStudioSimpleMessage implements INodeType {
 				let hasJsonSchema = false;
 				if (jsonSchemaStr && typeof jsonSchemaStr === 'string' && jsonSchemaStr.trim()) {
 					try {
-						const parsedSchema = JSON.parse(jsonSchemaStr);
-						requestBody.response_format = {
-							type: 'json_schema',
-							json_schema: parsedSchema,
-						};
-						hasJsonSchema = true;
+						const parsedSchema = JSON.parse(jsonSchemaStr || '{}');
+						if (Object.keys(parsedSchema).length > 0) {
+							requestBody.response_format = {
+								type: 'json_schema',
+								json_schema: parsedSchema,
+							};
+							hasJsonSchema = true;
+						}
 					} catch (error) {
 						throw new NodeOperationError(
 							this.getNode(),
