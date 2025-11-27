@@ -85,7 +85,55 @@ export class LmStudioSimpleMessage implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 
-		// TODO: Implement execution logic
+		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+			// Extract parameters
+			const hostName = this.getNodeParameter('hostName', itemIndex) as string;
+			const modelName = this.getNodeParameter('modelName', itemIndex) as string;
+			const message = this.getNodeParameter('message', itemIndex) as string;
+			const temperature = this.getNodeParameter('temperature', itemIndex) as number;
+			const maxTokens = this.getNodeParameter('maxTokens', itemIndex, '') as number | string;
+
+			// Build base request body
+			const requestBody: any = {
+				model: modelName,
+				messages: [
+					{
+						role: 'user',
+						content: message,
+					},
+				],
+				temperature: temperature,
+			};
+
+			// Add max_tokens if provided
+			if (maxTokens && typeof maxTokens === 'number' && maxTokens > 0) {
+				requestBody.max_tokens = maxTokens;
+			}
+
+			// Auto-detect protocol
+			let url = hostName;
+			if (!hostName.startsWith('http://') && !hostName.startsWith('https://')) {
+				url = `http://${hostName}`;
+			}
+			url = `${url}/v1/chat/completions`;
+
+			// Make HTTP request
+			const response = await this.helpers.httpRequest({
+				method: 'POST',
+				url,
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: requestBody,
+				json: true,
+			});
+
+			// Extract response content
+			const content = response.choices?.[0]?.message?.content;
+
+			// Set item.json to direct text content
+			items[itemIndex].json = content;
+		}
 
 		return [items];
 	}
