@@ -6,6 +6,22 @@ import type {
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
+
+const JSON_SCHEMA_SAMPLE = `
+{
+  "name": "colors",
+  "strict": true,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "colors": {
+        "type": "array", "items": { "type": "string" }
+      }
+    }
+  }
+}
+`;
+
 export class LmStudioSimpleMessage implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'LM Studio Simple Message',
@@ -28,7 +44,7 @@ export class LmStudioSimpleMessage implements INodeType {
 				default: 'https://localhost:1234',
 				required: true,
 				placeholder: 'https://localhost:1234',
-				description: 'LM Studio server hostname and port.',
+				description: 'LM Studio server hostname and port',
 			},
 			{
 				displayName: 'Model Name',
@@ -44,7 +60,7 @@ export class LmStudioSimpleMessage implements INodeType {
 				name: 'message',
 				type: 'string',
 				typeOptions: {
-					rows: 5,
+					rows: 3,
 				},
 				default: '',
 				required: true,
@@ -54,8 +70,12 @@ export class LmStudioSimpleMessage implements INodeType {
 				displayName: 'JSON Schema',
 				name: 'jsonSchema',
 				type: 'json',
-				default: '{}',
-				description: 'Optional JSON schema for structured output. Provide any valid JSON schema - it will be automatically wrapped in the required format. Use {} for no schema.',
+				typeOptions: {
+					rows: 10,
+				},
+				default: null,
+				placeholder: JSON_SCHEMA_SAMPLE,
+				description: 'Optional JSON schema for structured output. Use {} for no schema. Example:' + JSON_SCHEMA_SAMPLE,
 			},
 			{
 				displayName: 'Temperature',
@@ -76,7 +96,6 @@ export class LmStudioSimpleMessage implements INodeType {
 				typeOptions: {
 					minValue: 1,
 				},
-				required: false,
 				default: null,
 				description: 'Maximum number of tokens to generate. Leave empty for model default.',
 			},
