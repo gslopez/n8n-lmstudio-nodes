@@ -92,6 +92,7 @@ export class LmStudioSimpleMessage implements INodeType {
 			const message = this.getNodeParameter('message', itemIndex) as string;
 			const temperature = this.getNodeParameter('temperature', itemIndex) as number;
 			const maxTokens = this.getNodeParameter('maxTokens', itemIndex, '') as number | string;
+			const jsonSchemaStr = this.getNodeParameter('jsonSchema', itemIndex, '') as string;
 
 			// Build base request body
 			const requestBody: any = {
@@ -108,6 +109,17 @@ export class LmStudioSimpleMessage implements INodeType {
 			// Add max_tokens if provided
 			if (maxTokens && typeof maxTokens === 'number' && maxTokens > 0) {
 				requestBody.max_tokens = maxTokens;
+			}
+
+			// Parse and add JSON schema if provided
+			let hasJsonSchema = false;
+			if (jsonSchemaStr && typeof jsonSchemaStr === 'string' && jsonSchemaStr.trim()) {
+				const parsedSchema = JSON.parse(jsonSchemaStr);
+				requestBody.response_format = {
+					type: 'json_schema',
+					json_schema: parsedSchema,
+				};
+				hasJsonSchema = true;
 			}
 
 			// Auto-detect protocol
@@ -131,8 +143,13 @@ export class LmStudioSimpleMessage implements INodeType {
 			// Extract response content
 			const content = response.choices?.[0]?.message?.content;
 
-			// Set item.json to direct text content
-			items[itemIndex].json = content;
+			// Parse JSON if schema was provided, otherwise return direct text
+			if (hasJsonSchema) {
+				const parsedContent = JSON.parse(content);
+				items[itemIndex].json = parsedContent;
+			} else {
+				items[itemIndex].json = content;
+			}
 		}
 
 		return [items];
