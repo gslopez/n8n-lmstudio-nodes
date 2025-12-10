@@ -227,7 +227,7 @@ export class LmStudioSimpleMessage implements INodeType {
 				// Handle errors according to continueOnFail setting
 				if (this.continueOnFail()) {
 					items.push({
-						json: this.getInputData(itemIndex)[0].json,
+						json: items[itemIndex].json,
 						error,
 						pairedItem: itemIndex,
 					});
