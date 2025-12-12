@@ -99,6 +99,16 @@ export class LmStudioSimpleMessage implements INodeType {
 				default: null,
 				description: 'Maximum number of tokens to generate. Leave empty for model default.',
 			},
+			{
+				displayName: 'Timeout (Seconds)',
+				name: 'timeout',
+				type: 'number',
+				typeOptions: {
+					minValue: 0,
+				},
+				default: 0,
+				description: 'Request timeout in seconds. Set to 0 for no timeout (default). LLM requests can take a while, especially with larger models.',
+			},
 		],
 	};
 
@@ -113,6 +123,7 @@ export class LmStudioSimpleMessage implements INodeType {
 				const message = this.getNodeParameter('message', itemIndex) as string;
 				const temperature = this.getNodeParameter('temperature', itemIndex) as number;
 				const maxTokens = this.getNodeParameter('maxTokens', itemIndex, '') as number | string;
+				const timeout = this.getNodeParameter('timeout', itemIndex, 0) as number;
 				const jsonSchemaStr = this.getNodeParameter('jsonSchema', itemIndex, '{}') as string;
 
 				// Build base request body
@@ -172,15 +183,18 @@ export class LmStudioSimpleMessage implements INodeType {
 				// Make HTTP request
 				let response;
 				try {
-					response = await this.helpers.httpRequest({
-						method: 'POST',
+					const requestOptions = {
+						method: 'POST' as const,
 						url,
 						headers: {
 							'Content-Type': 'application/json',
 						},
 						body: requestBody,
 						json: true,
-					});
+						...(timeout > 0 && { timeout: timeout * 1000 }),
+					};
+
+					response = await this.helpers.httpRequest(requestOptions);
 				} catch (error) {
 					throw new NodeOperationError(
 						this.getNode(),
