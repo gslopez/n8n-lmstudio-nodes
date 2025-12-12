@@ -1,6 +1,8 @@
 import type {
 	IExecuteFunctions,
+	ILoadOptionsFunctions,
 	INodeExecutionData,
+	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
@@ -9,16 +11,13 @@ import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 const JSON_SCHEMA_SAMPLE = `
 {
-  "name": "colors",
-  "strict": true,
-  "schema": {
-    "type": "object",
-    "properties": {
-      "colors": {
-        "type": "array", "items": { "type": "string" }
-      }
-    }
-  }
+	"type": "object",
+	"properties": {
+		"colors": {
+			"type": "array",
+			"items": { "type": "string" }
+		}
+	}
 }
 `;
 
@@ -49,11 +48,13 @@ export class LmStudioSimpleMessage implements INodeType {
 			{
 				displayName: 'Model Name',
 				name: 'modelName',
-				type: 'string',
-				default: 'google/gemma-3-4b',
+				type: 'options',
+				typeOptions: {
+					loadOptionsMethod: 'getModels',
+				},
+				default: '',
 				required: true,
-				placeholder: 'LM Studio model name',
-				description: 'The model identifier to use',
+				description: 'The model identifier to use. Models are fetched from your LM Studio server.',
 			},
 			{
 				displayName: 'Message',
@@ -112,6 +113,42 @@ export class LmStudioSimpleMessage implements INodeType {
 		],
 	};
 
+	methods = {
+		loadOptions: {
+			async getModels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+				const hostName = this.getNodeParameter('hostName', '') as string;
+
+				let url = hostName;
+				if (!hostName.startsWith('http://') && !hostName.startsWith('https://')) {
+					url = `http://${hostName}`;
+				}
+				url = `${url}/api/v0/models`;
+
+				try {
+					const response = await this.helpers.httpRequest({
+						method: 'GET',
+						url,
+						json: true,
+					});
+
+					if (response?.data && Array.isArray(response.data)) {
+						return response.data
+							.filter((model: { type?: string }) => model.type === 'llm' || model.type === 'vlm')
+							.map((model: { id: string; state?: string; quantization?: string }) => ({
+								name: `${model.id}${model.state === 'loaded' ? ' (loaded)' : ''}`,
+								value: model.id,
+								description: model.quantization ? `Quantization: ${model.quantization}` : undefined,
+							}));
+					}
+
+					return [];
+				} catch {
+					return [{ name: 'Could not connect to LM Studio', value: '' }];
+				}
+			},
+		},
+	};
+
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 
@@ -160,7 +197,11 @@ export class LmStudioSimpleMessage implements INodeType {
 						if (Object.keys(parsedSchema).length > 0) {
 							requestBody.response_format = {
 								type: 'json_schema',
-								json_schema: parsedSchema,
+								json_schema: {
+									name: "outputSchema",
+									strict: true,
+									schema: parsedSchema,
+								},
 							};
 							hasJsonSchema = true;
 						}
@@ -196,9 +237,12 @@ export class LmStudioSimpleMessage implements INodeType {
 
 					response = await this.helpers.httpRequest(requestOptions);
 				} catch (error) {
+					const details = error.response?.data
+						? `\n${JSON.stringify(error.response.data, null, 2)}`
+						: '';
 					throw new NodeOperationError(
 						this.getNode(),
-						`HTTP request failed: ${error.message}`,
+						`LM Studio request failed: ${error.message}${details}`,
 						{ itemIndex },
 					);
 				}
@@ -235,7 +279,7 @@ export class LmStudioSimpleMessage implements INodeType {
 						);
 					}
 				} else {
-					items[itemIndex].json = content;
+					items[itemIndex].json = { response: content };
 				}
 			} catch (error) {
 				// Handle errors according to continueOnFail setting
