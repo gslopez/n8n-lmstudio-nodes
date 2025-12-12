@@ -51,9 +51,11 @@ export class LmStudioSimpleMessage implements INodeType {
 				type: 'options',
 				typeOptions: {
 					loadOptionsMethod: 'getModels',
+					loadOptionsDependsOn: ['hostName'],
 				},
 				default: '',
 				required: true,
+				noDataExpression: true,
 				description: 'The model identifier to use. Models are fetched from your LM Studio server.',
 			},
 			{
@@ -132,16 +134,22 @@ export class LmStudioSimpleMessage implements INodeType {
 					});
 
 					if (response?.data && Array.isArray(response.data)) {
-						return response.data
+						const models = response.data
 							.filter((model: { type?: string }) => model.type === 'llm' || model.type === 'vlm')
 							.map((model: { id: string; state?: string; quantization?: string }) => ({
 								name: `${model.id}${model.state === 'loaded' ? ' (loaded)' : ''}`,
 								value: model.id,
 								description: model.quantization ? `Quantization: ${model.quantization}` : undefined,
-							}));
+							}))
+							.sort((a: INodePropertyOptions, b: INodePropertyOptions) => a.name.localeCompare(b.name));
+
+						if (models.length === 0) {
+							return [{ name: 'No models found', value: '' }];
+						}
+						return models;
 					}
 
-					return [];
+					return [{ name: 'No models found', value: '' }];
 				} catch {
 					return [{ name: 'Could not connect to LM Studio', value: '' }];
 				}
