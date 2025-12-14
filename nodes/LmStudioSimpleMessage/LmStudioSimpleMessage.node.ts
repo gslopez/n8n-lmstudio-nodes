@@ -159,6 +159,8 @@ export class LmStudioSimpleMessage implements INodeType {
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
+		const logger = this.logger;
+		const executionId = this.getExecutionId?.() ?? 'unknown';
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			try {
@@ -170,6 +172,13 @@ export class LmStudioSimpleMessage implements INodeType {
 				const maxTokens = this.getNodeParameter('maxTokens', itemIndex, '') as number | string;
 				const timeout = this.getNodeParameter('timeout', itemIndex, 0) as number;
 				const jsonSchemaStr = this.getNodeParameter('jsonSchema', itemIndex, '{}') as string;
+
+				logger.info(`[${executionId}] Starting LM Studio request`, {
+					itemIndex,
+					model: modelName,
+					messageLength: message.length,
+					timeout: timeout || 'none',
+				});
 
 				// Build base request body
 				const requestBody: {
@@ -229,9 +238,11 @@ export class LmStudioSimpleMessage implements INodeType {
 				}
 				url = `${url}/v1/chat/completions`;
 
-				// Make HTTP request
+				// Make HTTP request with abort signal support
 				let response;
 				try {
+					const abortSignal = this.getExecutionCancelSignal?.();
+
 					const requestOptions = {
 						method: 'POST' as const,
 						url,
@@ -240,11 +251,42 @@ export class LmStudioSimpleMessage implements INodeType {
 						},
 						body: requestBody,
 						json: true,
+						skipSslCertificateValidation: true,
 						...(timeout > 0 && { timeout: timeout * 1000 }),
+						...(abortSignal && { abortSignal }),
 					};
 
+					const startTime = Date.now();
 					response = await this.helpers.httpRequest(requestOptions);
+					const duration = Date.now() - startTime;
+
+					logger.info(`[${executionId}] LM Studio request completed`, {
+						itemIndex,
+						durationMs: duration,
+						model: modelName,
+					});
 				} catch (error) {
+					const isAborted = error.name === 'AbortError' || error.code === 'ABORT_ERR';
+					const isTimeout = error.code === 'ETIMEDOUT' || error.code === 'ESOCKETTIMEDOUT' || error.message?.includes('timeout');
+
+					logger.error(`[${executionId}] LM Studio request failed`, {
+						itemIndex,
+						model: modelName,
+						errorName: error.name,
+						errorCode: error.code,
+						errorMessage: error.message,
+						isAborted,
+						isTimeout,
+					});
+
+					if (isAborted) {
+						throw new NodeOperationError(
+							this.getNode(),
+							'Request was cancelled (execution aborted or timed out)',
+							{ itemIndex },
+						);
+					}
+
 					const details = error.response?.data
 						? `\n${JSON.stringify(error.response.data, null, 2)}`
 						: '';
