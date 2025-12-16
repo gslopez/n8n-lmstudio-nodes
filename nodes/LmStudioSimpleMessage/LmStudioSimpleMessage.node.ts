@@ -7,6 +7,13 @@ import type {
 	INodeTypeDescription,
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
+import axios from 'axios';
+import * as http from 'http';
+import * as https from 'https';
+
+// Keep-alive agents for maintaining persistent connections during long LLM inference
+const httpAgent = new http.Agent({ keepAlive: true });
+const httpsAgent = new https.Agent({ keepAlive: true, rejectUnauthorized: false });
 
 
 const JSON_SCHEMA_SAMPLE = `
@@ -238,26 +245,25 @@ export class LmStudioSimpleMessage implements INodeType {
 				}
 				url = `${url}/v1/chat/completions`;
 
-				// Make HTTP request with abort signal support
+				// Make HTTP request with abort signal support and keep-alive
 				let response;
 				try {
 					const abortSignal = this.getExecutionCancelSignal?.();
 
-					const requestOptions = {
-						method: 'POST' as const,
+					const startTime = Date.now();
+					const axiosResponse = await axios({
+						method: 'POST',
 						url,
 						headers: {
 							'Content-Type': 'application/json',
 						},
-						body: requestBody,
-						json: true,
-						skipSslCertificateValidation: true,
-						...(timeout > 0 && { timeout: timeout * 1000 }),
-						...(abortSignal && { abortSignal }),
-					};
-
-					const startTime = Date.now();
-					response = await this.helpers.httpRequest(requestOptions);
+						data: requestBody,
+						httpAgent,
+						httpsAgent,
+						timeout: timeout > 0 ? timeout * 1000 : 0,
+						signal: abortSignal,
+					});
+					response = axiosResponse.data;
 					const duration = Date.now() - startTime;
 
 					logger.info(`[${executionId}] LM Studio request completed`, {
