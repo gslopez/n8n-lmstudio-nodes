@@ -322,11 +322,23 @@ export class LmStudioSimpleMessage implements INodeType {
 					);
 				}
 
+				// Build metadata from LM Studio response
+				const metadata = {
+					model: response.model,
+					usage: response.usage,
+					created: response.created,
+					id: response.id,
+					finish_reason: response.choices[0].finish_reason,
+				};
+
 				// Parse JSON if schema was provided, otherwise return direct text
 				if (hasJsonSchema) {
 					try {
 						const parsedContent = JSON.parse(content);
-						items[itemIndex].json = parsedContent;
+						items[itemIndex].json = {
+							...parsedContent,
+							_metadata: metadata,
+						};
 					} catch (error) {
 						throw new NodeOperationError(
 							this.getNode(),
@@ -335,7 +347,10 @@ export class LmStudioSimpleMessage implements INodeType {
 						);
 					}
 				} else {
-					items[itemIndex].json = { response: content };
+					items[itemIndex].json = {
+						response: content,
+						_metadata: metadata,
+					};
 				}
 			} catch (error) {
 				// Handle errors according to continueOnFail setting
