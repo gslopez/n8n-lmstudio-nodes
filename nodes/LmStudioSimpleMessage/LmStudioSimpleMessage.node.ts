@@ -336,7 +336,7 @@ export class LmStudioSimpleMessage implements INodeType {
 					try {
 						const parsedContent = JSON.parse(content);
 						items[itemIndex].json = {
-							...parsedContent,
+							response: parsedContent,
 							_metadata: metadata,
 						};
 					} catch (error) {
