@@ -32,7 +32,7 @@ export class LmStudioSimpleMessage implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'LM Studio Simple Message',
 		name: 'lmStudioSimpleMessage',
-		icon: { light: 'file:lmstudio.svg', dark: 'file:lmstudio.dark.svg' },
+		icon: { light: 'file:lmstudio.png', dark: 'file:lmstudio.dark.png' },
 		group: ['transform'],
 		version: 1,
 		description: 'Send messages to LM Studio with optional JSON schema for structured outputs',
