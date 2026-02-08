@@ -1,47 +1,42 @@
-import type {
-	ICredentialTestRequest,
-	ICredentialType,
-	INodeProperties,
-	Icon,
-} from 'n8n-workflow';
+import type { ICredentialTestRequest, ICredentialType, INodeProperties, Icon } from 'n8n-workflow';
 
 export class LmStudioApi implements ICredentialType {
-	name = 'lmStudioApi';
+    name = 'lmStudioApi';
 
-	displayName = 'LM Studio API';
+    displayName = 'LM Studio API';
 
-	icon: Icon = {
-		light: 'file:../nodes/LMStudioSimpleMessage/lmstudio.svg',
-		dark: 'file:../nodes/LMStudioSimpleMessage/lmstudio.dark.svg',
-	};
+    icon: Icon = {
+        light: 'file:../nodes/LMStudioSimpleMessage/lmstudio.svg',
+        dark: 'file:../nodes/LMStudioSimpleMessage/lmstudio.dark.svg',
+    };
 
-	documentationUrl = 'https://lmstudio.ai/docs';
+    documentationUrl = 'https://lmstudio.ai/docs';
 
-	properties: INodeProperties[] = [
-		{
-			displayName: 'Host URL',
-			name: 'hostUrl',
-			type: 'string',
-			default: 'http://localhost:1234',
-			placeholder: 'http://localhost:1234',
-			description: 'LM Studio server URL including protocol and port',
-		},
-		{
-			displayName: 'API Key',
-			name: 'apiKey',
-			type: 'string',
-			typeOptions: { password: true },
-			default: '',
-			description:
-				'Optional API key for LM Studio. Leave empty if your server does not require authentication.',
-		},
-	];
+    properties: INodeProperties[] = [
+        {
+            displayName: 'Host URL',
+            name: 'hostUrl',
+            type: 'string',
+            default: 'http://localhost:1234',
+            placeholder: 'http://localhost:1234',
+            description: 'LM Studio server URL including protocol and port',
+        },
+        {
+            displayName: 'API Key',
+            name: 'apiKey',
+            type: 'string',
+            typeOptions: { password: true },
+            default: '',
+            description:
+                'Optional API key for LM Studio. Leave empty if your server does not require authentication.',
+        },
+    ];
 
-	test: ICredentialTestRequest = {
-		request: {
-			baseURL: '={{$credentials?.hostUrl}}',
-			url: '/api/v0/models',
-			method: 'GET',
-		},
-	};
+    test: ICredentialTestRequest = {
+        request: {
+            baseURL: '={{$credentials?.hostUrl}}',
+            url: '/api/v0/models',
+            method: 'GET',
+        },
+    };
 }
