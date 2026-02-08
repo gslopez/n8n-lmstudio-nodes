@@ -1,6 +1,6 @@
 import type { IExecuteFunctions, ILoadOptionsFunctions } from 'n8n-workflow';
 import { NodeApiError, NodeOperationError } from 'n8n-workflow';
-import { LmStudioSimpleMessage } from '../../nodes/LMStudioSimpleMessage/LmStudioSimpleMessage.node';
+import { LmStudioSimpleMessage } from 'nodes/LmStudioSimpleMessage/LmStudioSimpleMessage.node';
 
 // --- Helpers ---
 

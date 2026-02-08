@@ -8,7 +8,7 @@
 import * as http from 'http';
 import * as https from 'https';
 import type { IExecuteFunctions, ILoadOptionsFunctions } from 'n8n-workflow';
-import { LmStudioSimpleMessage } from '../../nodes/LMStudioSimpleMessage/LmStudioSimpleMessage.node';
+import { LmStudioSimpleMessage } from 'nodes/LmStudioSimpleMessage/LmStudioSimpleMessage.node';
 
 const LM_STUDIO_URL = process.env.LM_STUDIO_URL;
 const LM_STUDIO_MODEL = process.env.LM_STUDIO_MODEL || 'qwen/qwen3-4b-2507';
