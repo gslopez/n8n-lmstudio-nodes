@@ -6,8 +6,8 @@ export class LmStudioApi implements ICredentialType {
     displayName = 'LM Studio API';
 
     icon: Icon = {
-        light: 'file:../nodes/LMStudioSimpleMessage/lmstudio.svg',
-        dark: 'file:../nodes/LMStudioSimpleMessage/lmstudio.dark.svg',
+        light: 'file:../nodes/LmStudioSimpleMessage/lmstudio.svg',
+        dark: 'file:../nodes/LmStudioSimpleMessage/lmstudio.dark.svg',
     };
 
     documentationUrl = 'https://lmstudio.ai/docs';
