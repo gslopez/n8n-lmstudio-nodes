@@ -44,6 +44,10 @@ function realHttpRequest(options: {
 				let data = '';
 				res.on('data', (chunk: Buffer) => (data += chunk.toString()));
 				res.on('end', () => {
+					if (res.statusCode && res.statusCode >= 400) {
+						reject(Object.assign(new Error(data), { statusCode: res.statusCode }));
+						return;
+					}
 					try {
 						resolve(options.json ? JSON.parse(data) : data);
 					} catch {
@@ -144,5 +148,17 @@ describeIf('LmStudioSimpleMessage (integration)', () => {
 		expect(typeof (result[0][0].json.response as Record<string, unknown>).greeting).toBe(
 			'string',
 		);
+	}, 120_000);
+
+	it('throws when prompt exceeds model context length', async () => {
+		// Generate a message far larger than any small model's context window
+		const hugeMessage = 'hello world '.repeat(50_000); // ~100k tokens
+		const mock = createRealExecuteMock({
+			modelName: LM_STUDIO_MODEL,
+			message: hugeMessage,
+			maxTokens: 10,
+		});
+
+		await expect(node.execute.call(mock)).rejects.toThrow();
 	}, 120_000);
 });
