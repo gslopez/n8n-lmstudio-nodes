@@ -1,5 +1,5 @@
 {
-	"node": "n8n-nodes-lm-studio-simple-message",
+	"node": "n8n-nodes-lmstudio.lmStudioSimpleMessage",
 	"nodeVersion": "1.0",
 	"codexVersion": "1.0",
 	"categories": ["Ai", "Development"],
