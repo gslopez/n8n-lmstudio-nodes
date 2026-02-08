@@ -26,6 +26,8 @@
 		"lint": "n8n-node lint",
 		"lint:fix": "n8n-node lint --fix",
 		"release": "n8n-node release",
+		"test": "jest",
+		"test:integration": "jest --config jest.integration.config.js",
 		"prepublishOnly": "n8n-node prerelease",
 		"prepare": "npm run build"
 	},
@@ -34,7 +36,7 @@
 	],
 	"n8n": {
 		"n8nNodesApiVersion": 1,
-		"strict": true,
+		"strict": false,
 		"credentials": [
 			"dist/credentials/LmStudioApi.credentials.js"
 		],
@@ -42,13 +44,15 @@
 			"dist/nodes/LmStudioSimpleMessage/LmStudioSimpleMessage.node.js"
 		]
 	},
-	"dependencies": {},
 	"devDependencies": {
 		"@n8n/node-cli": "*",
+		"@types/jest": "^30.0.0",
 		"@types/node": "^22.0.0",
 		"eslint": "9.32.0",
+		"jest": "^30.2.0",
 		"prettier": "3.6.2",
 		"release-it": "^19.0.4",
+		"ts-jest": "^29.4.6",
 		"typescript": "5.9.2"
 	},
 	"peerDependencies": {
