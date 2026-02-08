@@ -35,14 +35,14 @@
 	"n8n": {
 		"n8nNodesApiVersion": 1,
 		"strict": true,
-		"credentials": [],
+		"credentials": [
+			"dist/credentials/LmStudioApi.credentials.js"
+		],
 		"nodes": [
 			"dist/nodes/LmStudioSimpleMessage/LmStudioSimpleMessage.node.js"
 		]
 	},
-	"dependencies": {
-		"axios": "^1.7.0"
-	},
+	"dependencies": {},
 	"devDependencies": {
 		"@n8n/node-cli": "*",
 		"@types/node": "^22.0.0",

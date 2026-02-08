@@ -1,20 +1,51 @@
 import type {
+	IDataObject,
 	IExecuteFunctions,
 	ILoadOptionsFunctions,
 	INodeExecutionData,
 	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
+	JsonObject,
 } from 'n8n-workflow';
-import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
-import axios from 'axios';
-import * as http from 'http';
-import * as https from 'https';
+import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
-// Keep-alive agents for maintaining persistent connections during long LLM inference
-const httpAgent = new http.Agent({ keepAlive: true });
-const httpsAgent = new https.Agent({ keepAlive: true, rejectUnauthorized: false });
+// --- Type definitions for LM Studio API responses ---
 
+interface LmStudioModel {
+	id: string;
+	type?: string;
+	state?: string;
+	quantization?: string;
+}
+
+interface LmStudioModelsResponse {
+	data: LmStudioModel[];
+}
+
+interface LmStudioChatChoice {
+	message: { content: string };
+	finish_reason: string;
+}
+
+interface LmStudioChatResponse {
+	choices: LmStudioChatChoice[];
+	model: string;
+	usage: Record<string, unknown>;
+	created: number;
+	id: string;
+}
+
+// --- Utilities ---
+
+function buildUrl(hostUrl: string, path: string): string {
+	let base = hostUrl;
+	if (!base.startsWith('http://') && !base.startsWith('https://')) {
+		base = `http://${base}`;
+	}
+	// Remove trailing slash from base to avoid double slashes
+	return `${base.replace(/\/+$/, '')}${path}`;
+}
 
 const JSON_SCHEMA_SAMPLE = `
 {
@@ -32,8 +63,8 @@ export class LmStudioSimpleMessage implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'LM Studio Simple Message',
 		name: 'lmStudioSimpleMessage',
-		icon: { light: 'file:lmstudio.png', dark: 'file:lmstudio.dark.png' },
-		group: ['transform'],
+		icon: { light: 'file:lmstudio.svg', dark: 'file:lmstudio.dark.svg' },
+		group: ['output'],
 		version: 1,
 		description: 'Send messages to LM Studio with optional JSON schema for structured outputs',
 		defaults: {
@@ -42,28 +73,24 @@ export class LmStudioSimpleMessage implements INodeType {
 		inputs: [NodeConnectionTypes.Main],
 		outputs: [NodeConnectionTypes.Main],
 		usableAsTool: true,
+		credentials: [
+			{
+				name: 'lmStudioApi',
+				required: true,
+			},
+		],
 		properties: [
 			{
-				displayName: 'Host Name',
-				name: 'hostName',
-				type: 'string',
-				default: 'https://localhost:1234',
-				required: true,
-				placeholder: 'https://localhost:1234',
-				description: 'LM Studio server hostname and port',
-			},
-			{
-				displayName: 'Model Name',
+				displayName: 'Model Name or ID',
 				name: 'modelName',
 				type: 'options',
 				typeOptions: {
 					loadOptionsMethod: 'getModels',
-					loadOptionsDependsOn: ['hostName'],
 				},
 				default: '',
 				required: true,
 				noDataExpression: true,
-				description: 'The model identifier to use. Models are fetched from your LM Studio server.',
+				description: 'The model identifier to use. Models are fetched from your LM Studio server. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			{
 				displayName: 'Message',
@@ -85,7 +112,9 @@ export class LmStudioSimpleMessage implements INodeType {
 				},
 				default: null,
 				placeholder: JSON_SCHEMA_SAMPLE,
-				description: 'Optional JSON schema for structured output. Use {} for no schema. Example:' + JSON_SCHEMA_SAMPLE,
+				description:
+					'Optional JSON schema for structured output. Use {} for no schema. Example:' +
+					JSON_SCHEMA_SAMPLE,
 			},
 			{
 				displayName: 'Temperature',
@@ -97,7 +126,8 @@ export class LmStudioSimpleMessage implements INodeType {
 					numberPrecision: 2,
 				},
 				default: 0.3,
-				description: 'Controls randomness. Lower values make output more focused and deterministic.',
+				description:
+					'Controls randomness. Lower values make output more focused and deterministic.',
 			},
 			{
 				displayName: 'Max Tokens',
@@ -117,7 +147,8 @@ export class LmStudioSimpleMessage implements INodeType {
 					minValue: 0,
 				},
 				default: 0,
-				description: 'Request timeout in seconds. Set to 0 for no timeout (default). LLM requests can take a while, especially with larger models.',
+				description:
+					'Request timeout in seconds. Set to 0 for no timeout (default). LLM requests can take a while, especially with larger models.',
 			},
 		],
 	};
@@ -125,40 +156,40 @@ export class LmStudioSimpleMessage implements INodeType {
 	methods = {
 		loadOptions: {
 			async getModels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				const hostName = this.getNodeParameter('hostName', '') as string;
-
-				let url = hostName;
-				if (!hostName.startsWith('http://') && !hostName.startsWith('https://')) {
-					url = `http://${hostName}`;
-				}
-				url = `${url}/api/v0/models`;
+				const credentials = await this.getCredentials('lmStudioApi');
+				const hostUrl = credentials.hostUrl as string;
+				const url = buildUrl(hostUrl, '/api/v0/models');
 
 				try {
-					const response = await this.helpers.httpRequest({
+					const response = (await this.helpers.httpRequest({
 						method: 'GET',
 						url,
 						json: true,
-					});
+					})) as LmStudioModelsResponse;
 
 					if (response?.data && Array.isArray(response.data)) {
 						const models = response.data
-							.filter((model: { type?: string }) => model.type === 'llm' || model.type === 'vlm')
-							.map((model: { id: string; state?: string; quantization?: string }) => ({
+							.filter((model) => model.type === 'llm' || model.type === 'vlm')
+							.map((model) => ({
 								name: `${model.id}${model.state === 'loaded' ? ' (loaded)' : ''}`,
 								value: model.id,
-								description: model.quantization ? `Quantization: ${model.quantization}` : undefined,
+								description: model.quantization
+									? `Quantization: ${model.quantization}`
+									: undefined,
 							}))
-							.sort((a: INodePropertyOptions, b: INodePropertyOptions) => a.name.localeCompare(b.name));
+							.sort((a: INodePropertyOptions, b: INodePropertyOptions) =>
+								a.name.localeCompare(b.name),
+							);
 
 						if (models.length === 0) {
-							return [{ name: 'No models found', value: '' }];
+							return [{ name: 'No Models Found', value: '' }];
 						}
 						return models;
 					}
 
-					return [{ name: 'No models found', value: '' }];
+					return [{ name: 'No Models Found', value: '' }];
 				} catch {
-					return [{ name: 'Could not connect to LM Studio', value: '' }];
+					return [{ name: 'Could Not Connect to LM Studio', value: '' }];
 				}
 			},
 		},
@@ -166,17 +197,23 @@ export class LmStudioSimpleMessage implements INodeType {
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
+		const returnData: INodeExecutionData[] = [];
 		const logger = this.logger;
 		const executionId = this.getExecutionId?.() ?? 'unknown';
+
+		const credentials = await this.getCredentials('lmStudioApi');
+		const hostUrl = credentials.hostUrl as string;
+		const apiKey = credentials.apiKey as string;
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			try {
 				// Extract parameters
-				const hostName = this.getNodeParameter('hostName', itemIndex) as string;
 				const modelName = this.getNodeParameter('modelName', itemIndex) as string;
 				const message = this.getNodeParameter('message', itemIndex) as string;
 				const temperature = this.getNodeParameter('temperature', itemIndex) as number;
-				const maxTokens = this.getNodeParameter('maxTokens', itemIndex, '') as number | string;
+				const maxTokens = this.getNodeParameter('maxTokens', itemIndex, '') as
+					| number
+					| string;
 				const timeout = this.getNodeParameter('timeout', itemIndex, 0) as number;
 				const jsonSchemaStr = this.getNodeParameter('jsonSchema', itemIndex, '{}') as string;
 
@@ -199,13 +236,8 @@ export class LmStudioSimpleMessage implements INodeType {
 					};
 				} = {
 					model: modelName,
-					messages: [
-						{
-							role: 'user',
-							content: message,
-						},
-					],
-					temperature: temperature,
+					messages: [{ role: 'user', content: message }],
+					temperature,
 				};
 
 				// Add max_tokens if provided
@@ -217,94 +249,95 @@ export class LmStudioSimpleMessage implements INodeType {
 				let hasJsonSchema = false;
 				if (jsonSchemaStr && typeof jsonSchemaStr === 'string' && jsonSchemaStr.trim()) {
 					try {
-						const parsedSchema = JSON.parse(jsonSchemaStr || '{}');
+						const parsedSchema = JSON.parse(jsonSchemaStr || '{}') as Record<
+							string,
+							unknown
+						>;
 						if (Object.keys(parsedSchema).length > 0) {
 							requestBody.response_format = {
 								type: 'json_schema',
 								json_schema: {
-									name: "outputSchema",
+									name: 'outputSchema',
 									strict: true,
 									schema: parsedSchema,
 								},
 							};
 							hasJsonSchema = true;
 						}
-					} catch (error) {
+					} catch (parseError) {
 						throw new NodeOperationError(
 							this.getNode(),
-							`Invalid JSON Schema: ${error.message}`,
+							`Invalid JSON Schema: ${(parseError as Error).message}`,
 							{ itemIndex },
 						);
 					}
 				}
 
-				// Auto-detect protocol
-				let url = hostName;
-				if (!hostName.startsWith('http://') && !hostName.startsWith('https://')) {
-					url = `http://${hostName}`;
+				const url = buildUrl(hostUrl, '/v1/chat/completions');
+				const abortSignal = this.getExecutionCancelSignal?.();
+
+				// Build request headers
+				const headers: Record<string, string> = {
+					'Content-Type': 'application/json',
+				};
+				if (apiKey) {
+					headers['Authorization'] = `Bearer ${apiKey}`;
 				}
-				url = `${url}/v1/chat/completions`;
 
-				// Make HTTP request with abort signal support and keep-alive
-				let response;
+				const startTime = Date.now();
+				let response: LmStudioChatResponse;
 				try {
-					const abortSignal = this.getExecutionCancelSignal?.();
-
-					const startTime = Date.now();
-					const axiosResponse = await axios({
+					response = (await this.helpers.httpRequest({
 						method: 'POST',
 						url,
-						headers: {
-							'Content-Type': 'application/json',
-						},
-						data: requestBody,
-						httpAgent,
-						httpsAgent,
-						timeout: timeout > 0 ? timeout * 1000 : 0,
-						signal: abortSignal,
-					});
-					response = axiosResponse.data;
-					const duration = Date.now() - startTime;
-
-					logger.info(`[${executionId}] LM Studio request completed`, {
-						itemIndex,
-						durationMs: duration,
-						model: modelName,
-					});
+						headers,
+						body: requestBody,
+						json: true,
+						timeout: timeout > 0 ? timeout * 1000 : undefined,
+						abortSignal,
+					})) as LmStudioChatResponse;
 				} catch (error) {
-					const isAborted = error.name === 'AbortError' || error.code === 'ABORT_ERR';
-					const isTimeout = error.code === 'ETIMEDOUT' || error.code === 'ESOCKETTIMEDOUT' || error.message?.includes('timeout');
+					const err = error as NodeApiError & {
+						code?: string;
+						cause?: { code?: string };
+					};
+					const errorCode = err.code ?? err.cause?.code;
+					const isTimeout =
+						errorCode === 'ETIMEDOUT' ||
+						errorCode === 'ESOCKETTIMEDOUT' ||
+						errorCode === 'ECONNABORTED';
 
 					logger.error(`[${executionId}] LM Studio request failed`, {
 						itemIndex,
 						model: modelName,
-						errorName: error.name,
-						errorCode: error.code,
-						errorMessage: error.message,
-						isAborted,
+						errorCode,
+						errorMessage: err.message,
 						isTimeout,
 					});
 
-					if (isAborted) {
+					if (isTimeout) {
 						throw new NodeOperationError(
 							this.getNode(),
-							'Request was cancelled (execution aborted or timed out)',
+							`Request timed out after ${timeout} seconds. Consider increasing the timeout for larger models.`,
 							{ itemIndex },
 						);
 					}
 
-					const details = error.response?.data
-						? `\n${JSON.stringify(error.response.data, null, 2)}`
-						: '';
-					throw new NodeOperationError(
-						this.getNode(),
-						`LM Studio request failed: ${error.message}${details}`,
-						{ itemIndex },
-					);
+					throw new NodeApiError(this.getNode(), error as JsonObject, {
+						itemIndex,
+						message: `LM Studio request failed: ${err.message}`,
+					});
 				}
 
-				// Validate and extract response content
-				if (!response.choices || !response.choices[0] || !response.choices[0].message) {
+				const duration = Date.now() - startTime;
+				logger.info(`[${executionId}] LM Studio request completed`, {
+					itemIndex,
+					durationMs: duration,
+					model: modelName,
+				});
+
+				// Validate response structure
+				if (!response.choices?.[0]?.message) {
 					throw new NodeOperationError(
 						this.getNode(),
 						'Invalid response structure from LM Studio',
@@ -313,7 +346,6 @@ export class LmStudioSimpleMessage implements INodeType {
 				}
 
 				const content = response.choices[0].message.content;
-
 				if (!content) {
 					throw new NodeOperationError(
 						this.getNode(),
@@ -332,47 +364,49 @@ export class LmStudioSimpleMessage implements INodeType {
 				};
 
 				// Parse JSON if schema was provided, otherwise return direct text
+				let responseData: IDataObject;
 				if (hasJsonSchema) {
 					try {
-						const parsedContent = JSON.parse(content);
-						items[itemIndex].json = {
+						const parsedContent = JSON.parse(content) as IDataObject;
+						responseData = {
 							response: parsedContent,
 							_metadata: metadata,
 						};
-					} catch (error) {
+					} catch (parseError) {
 						throw new NodeOperationError(
 							this.getNode(),
-							`Failed to parse response as JSON: ${error.message}. Content: ${content}`,
+							`Failed to parse response as JSON: ${(parseError as Error).message}. Content: ${content}`,
 							{ itemIndex },
 						);
 					}
 				} else {
-					items[itemIndex].json = {
+					responseData = {
 						response: content,
 						_metadata: metadata,
 					};
 				}
+
+				returnData.push({
+					json: responseData,
+					pairedItem: { item: itemIndex },
+				});
 			} catch (error) {
-				// Handle errors according to continueOnFail setting
 				if (this.continueOnFail()) {
-					items.push({
-						json: items[itemIndex].json,
-						error,
-						pairedItem: itemIndex,
+					returnData.push({
+						json: { error: (error as Error).message },
+						pairedItem: { item: itemIndex },
 					});
-				} else {
-					// If the error already has context with itemIndex, throw it as-is
-					if (error.context) {
-						error.context.itemIndex = itemIndex;
-						throw error;
-					}
-					throw new NodeOperationError(this.getNode(), error, {
-						itemIndex,
-					});
+					continue;
 				}
+				if (error instanceof NodeApiError || error instanceof NodeOperationError) {
+					throw error;
+				}
+				throw new NodeOperationError(this.getNode(), error as Error, {
+					itemIndex,
+				});
 			}
 		}
 
-		return [items];
+		return [returnData];
 	}
 }
