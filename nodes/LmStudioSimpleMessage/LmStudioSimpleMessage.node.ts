@@ -1,6 +1,7 @@
 import type {
     IDataObject,
     IExecuteFunctions,
+    IHttpRequestOptions,
     ILoadOptionsFunctions,
     INodeExecutionData,
     INodePropertyOptions,
@@ -226,7 +227,7 @@ export class LmStudioSimpleMessage implements INodeType {
                     itemIndex,
                     model: modelName,
                     messageLength: message.length,
-                    timeout: timeout || 'none',
+                    timeout: timeout > 0 ? `${timeout}s` : 'disabled',
                 });
 
                 // Build base request body
@@ -292,15 +293,24 @@ export class LmStudioSimpleMessage implements INodeType {
                 const startTime = Date.now();
                 let response: LmStudioChatResponse;
                 try {
-                    response = (await this.helpers.httpRequest({
+                    // Build request options
+                    const requestOptions: IHttpRequestOptions = {
                         method: 'POST',
                         url,
                         headers,
                         body: requestBody,
                         json: true,
-                        timeout: timeout > 0 ? timeout * 1000 : undefined,
                         abortSignal,
-                    })) as LmStudioChatResponse;
+                    };
+
+                    // Only add timeout if it's greater than 0 (omit entirely for 0 = no timeout)
+                    if (timeout > 0) {
+                        requestOptions.timeout = timeout * 1000; // Convert seconds to milliseconds
+                    }
+
+                    response = (await this.helpers.httpRequest(
+                        requestOptions,
+                    )) as LmStudioChatResponse;
                 } catch (error) {
                     const err = error as NodeApiError & {
                         code?: string;
@@ -321,11 +331,13 @@ export class LmStudioSimpleMessage implements INodeType {
                     });
 
                     if (isTimeout) {
-                        throw new NodeOperationError(
-                            this.getNode(),
-                            `Request timed out after ${timeout} seconds. Consider increasing the timeout for larger models.`,
-                            { itemIndex },
-                        );
+                        const timeoutMessage =
+                            timeout > 0
+                                ? `Request timed out after ${timeout} seconds. Consider increasing the timeout for larger models.`
+                                : `Request timed out (no timeout was set). This may indicate a network issue or the LM Studio server is not responding.`;
+                        throw new NodeOperationError(this.getNode(), timeoutMessage, {
+                            itemIndex,
+                        });
                     }
 
                     throw new NodeApiError(this.getNode(), error as JsonObject, {

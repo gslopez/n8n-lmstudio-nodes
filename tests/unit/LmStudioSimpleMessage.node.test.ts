@@ -155,6 +155,28 @@ describe('LmStudioSimpleMessage', () => {
                 }),
             );
         });
+
+        it('omits timeout property when timeout is 0', async () => {
+            const mock = createExecuteMock({ timeout: 0 });
+            (mock.helpers.httpRequest as jest.Mock).mockResolvedValue(chatResponse('success'));
+
+            await node.execute.call(mock);
+
+            const callArgs = (mock.helpers.httpRequest as jest.Mock).mock.calls[0][0];
+            expect(callArgs).not.toHaveProperty('timeout');
+            expect(callArgs).toHaveProperty('method', 'POST');
+            expect(callArgs).toHaveProperty('json', true);
+        });
+
+        it('includes timeout property when timeout is greater than 0', async () => {
+            const mock = createExecuteMock({ timeout: 60 });
+            (mock.helpers.httpRequest as jest.Mock).mockResolvedValue(chatResponse('success'));
+
+            await node.execute.call(mock);
+
+            const callArgs = (mock.helpers.httpRequest as jest.Mock).mock.calls[0][0];
+            expect(callArgs).toHaveProperty('timeout', 60000); // 60 seconds = 60000 ms
+        });
     });
 
     describe('getModels', () => {
