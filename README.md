@@ -7,7 +7,6 @@ An [n8n](https://n8n.io) community node for [LM Studio](https://lmstudio.ai) —
 - **Dynamic model selector** — fetches available models from your LM Studio server, shows loaded/unloaded state and quantization info
 - **Structured JSON output** — provide a JSON schema and get validated, parsed responses
 - **Usable as a tool** — can be used as a tool node in n8n AI agent workflows
-- **Zero runtime dependencies** — uses n8n's built-in HTTP helpers
 
 ## Installation
 
@@ -62,6 +61,10 @@ Integration tests require a running LM Studio server:
 ```bash
 LM_STUDIO_URL=http://localhost:1234 npm run test:integration
 ```
+
+## Acknowledgments
+
+This project was developed with assistance from [Claude](https://claude.ai), Anthropic's AI assistant.
 
 ## License
 
