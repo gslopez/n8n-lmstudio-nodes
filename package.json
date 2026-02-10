@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-lmstudio",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "N8N nodes for LM Studio integration with JSON schema support",
 	"license": "MIT",
 	"homepage": "https://github.com/gslopez/n8n-lmstudio-nodes",
